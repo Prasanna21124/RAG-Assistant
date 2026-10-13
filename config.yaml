@@ -1,0 +1,21 @@
+# ─────────────────────────────────────────────────────────────
+# RAG Pipeline Configuration
+# Edit these values to customize the behaviour of your RAG bot.
+# ─────────────────────────────────────────────────────────────
+
+llm:
+  model: gemini-2.5-flash   # Google Gemini model (e.g. gemini-2.5-flash, gemini-3.5-flash)
+  temperature: 0.2          # 0.0 = factual / deterministic  |  1.0 = creative
+  max_tokens: 1024          # Maximum tokens in each response
+
+retrieval:
+  k: 10                     # Number of chunks retrieved per query (each retriever)
+  chunk_size: 1500          # Characters per chunk when splitting documents
+  chunk_overlap: 300        # Overlap between consecutive chunks
+  bm25_weight: 0.4          # Weight for BM25 (keyword-based) retriever
+  semantic_weight: 0.6      # Weight for FAISS (semantic / embedding) retriever
+
+paths:
+  data_folder: data/        # Folder where source documents are stored
+  index_path: faiss_index/  # Folder where the FAISS index is persisted on disk
+  sessions_dir: sessions/   # Folder where per-session chat history JSON files live
