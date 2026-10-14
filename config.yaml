@@ -9,9 +9,9 @@ llm:
   max_tokens: 1024          # Maximum tokens in each response
 
 retrieval:
-  k: 10                     # Number of chunks retrieved per query (each retriever)
-  chunk_size: 1500          # Characters per chunk when splitting documents
-  chunk_overlap: 300        # Overlap between consecutive chunks
+  k: 5                      # Number of chunks retrieved per query (each retriever)
+  chunk_size: 500           # Characters per chunk when splitting documents
+  chunk_overlap: 50         # Overlap between consecutive chunks
   bm25_weight: 0.4          # Weight for BM25 (keyword-based) retriever
   semantic_weight: 0.6      # Weight for FAISS (semantic / embedding) retriever
 
