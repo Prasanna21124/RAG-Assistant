@@ -103,9 +103,15 @@ class AskResponse(BaseModel):
 # Endpoints
 # ─────────────────────────────────────────────────────────────
 
-# ── Health ────────────────────────────────────────────────────
+# ── Health & Root ─────────────────────────────────────────────
+@app.get("/", tags=["System"])
+def root():
+    """Root endpoint for Railway health monitoring."""
+    return {"status": "ok", "message": "RAG Assistant API is online"}
+
+
 @app.get("/health", tags=["System"])
-def health_check(api_key: str = Depends(get_api_key)):
+def health_check():
     """Check whether the API is running and the index is loaded."""
     docs = list_documents(app_state.get("config"))
     return {
