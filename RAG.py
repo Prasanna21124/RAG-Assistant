@@ -388,10 +388,16 @@ class ChatMessage(Base):
     ts = Column(DateTime, default=datetime.utcnow)
 
 # Initialize DB connection
-DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/rag_db")
+raw_db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/rag_db")
+if raw_db_url.startswith("postgres://"):
+    raw_db_url = raw_db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postgresql+"):
+    raw_db_url = raw_db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+DB_URL = raw_db_url
 SessionLocal = None
 try:
-    engine = create_engine(DB_URL)
+    engine = create_engine(DB_URL, connect_args={"connect_timeout": 5})
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(bind=engine)
 except Exception as e:
