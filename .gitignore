@@ -12,9 +12,10 @@
 data/*
 !data/.gitkeep
 !data/amazon.csv
-faiss_index/
-*.faiss
-*.pkl
+# faiss_index is committed so Railway uses the pre-built index
+# faiss_index/
+# *.faiss
+# *.pkl
 sessions/
 
 # ─────────────────────────────────────────────────────────────
