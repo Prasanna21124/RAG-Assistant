@@ -1,5 +1,11 @@
 import os
+import sys
 from contextlib import asynccontextmanager
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Security
 from fastapi.security.api_key import APIKeyHeader
@@ -31,7 +37,7 @@ API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=True)
 
 def get_api_key(api_key: str = Security(api_key_header)):
-    expected_key = os.getenv("API_SECRET_KEY", "default-premium-key-123")
+    expected_key = os.getenv("API_SECRET_KEY", "my-super-secret-key-123")
     if api_key != expected_key:
         raise HTTPException(status_code=403, detail="Invalid API Key")
     return api_key
@@ -56,9 +62,11 @@ def _reload_index(config: dict) -> None:
 # ─────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
     config = load_config()
     app_state["config"] = config
-    _reload_index(config)
+    # Load index in background thread so uvicorn binds to $PORT immediately
+    asyncio.create_task(asyncio.to_thread(_reload_index, config))
     yield
     app_state.clear()
 

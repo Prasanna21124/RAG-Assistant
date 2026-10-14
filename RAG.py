@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import pickle
 import shutil
@@ -7,6 +8,12 @@ import csv
 import uuid
 import hashlib
 from datetime import datetime
+
+# Configure safe UTF-8 output streams
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from sqlalchemy import create_engine, Column, String, Text, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -19,7 +26,7 @@ from langchain_community.document_loaders import (
     PyPDFLoader,
     TextLoader,
     CSVLoader,
-    UnstructuredWordDocumentLoader,
+    Docx2txtLoader,
 )
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -34,7 +41,7 @@ SUPPORTED_LOADERS = {
     ".pdf": PyPDFLoader,
     ".txt": TextLoader,
     ".csv": CSVLoader,
-    ".docx": UnstructuredWordDocumentLoader,
+    ".docx": Docx2txtLoader,
 }
 
 _SPLIT_DOCS_FILE = "split_docs.pkl"
@@ -400,6 +407,7 @@ try:
     engine = create_engine(DB_URL, connect_args={"connect_timeout": 5})
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(bind=engine)
+    print("[OK] Database connected successfully.")
 except Exception as e:
     print(f"WARNING:  Database connection failed: {e}. Set DATABASE_URL in .env.")
 

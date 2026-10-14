@@ -7,14 +7,14 @@ faiss-cpu
 sentence-transformers
 python-dotenv
 pypdf
-unstructured
+docx2txt
 python-docx
 fastapi
 uvicorn
 python-multipart
 pyyaml
 rank-bm25
-streamlit
 requests
 sqlalchemy
 psycopg2-binary
+psycopg[binary]
