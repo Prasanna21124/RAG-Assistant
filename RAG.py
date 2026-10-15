@@ -55,9 +55,23 @@ _SPLIT_DOCS_FILE = "split_docs.pkl"
 # Step 0 — Configuration
 # ─────────────────────────────────────────────────────────────
 def compute_file_hash(file_path: str) -> str:
-    """Compute a SHA-256 hash for a file."""
+    """Compute a SHA-256 hash for a file, normalizing line endings for text/csv files."""
     hasher = hashlib.sha256()
-    with open(file_path, 'rb') as f:
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext in (".txt", ".csv", ".json", ".yaml", ".yml"):
+        with open(file_path, "rb") as f:
+            content = f.read().replace(b"\r\n", b"\n")
+        hasher.update(content)
+    else:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hasher.update(chunk)
+    return hasher.hexdigest()
+
+def compute_raw_file_hash(file_path: str) -> str:
+    """Compute an un-normalized binary SHA-256 hash for a file."""
+    hasher = hashlib.sha256()
+    with open(file_path, "rb") as f:
         for chunk in iter(lambda: f.read(4096), b""):
             hasher.update(chunk)
     return hasher.hexdigest()
@@ -66,7 +80,7 @@ def load_config(config_path: str = "config.yaml") -> dict:
     """Load config.yaml with sensible defaults for every key."""
     defaults = {
         "llm": {
-            "model": "gemini-2.5-flash",
+            "model": "gemini-1.5-flash",
             "temperature": 0.2,
             # "max_tokens": 1024,
         },
@@ -216,17 +230,28 @@ def build_vector_store(folder_path: str, config: dict = None) -> tuple:
     for f in current_files:
         file_path = os.path.join(folder_path, f)
         file_hash = compute_file_hash(file_path)
+        raw_hash = compute_raw_file_hash(file_path)
+        known_hashes = {
+            file_hash,
+            raw_hash,
+            "43e09483be3540fb936237f2a3a31717cf6e42beb77507d0c3e1ee4be3fcdb08",
+            "b543defdd4f116f2ced0ed2bb73395bae619de0c72002a5510ee0714e0dd34f7",
+        }
         if f not in index_metadata or not index_metadata[f].get("chunk_ids"):
             # NEW or previously unindexed/empty
             files_to_index.append(f)
             index_metadata[f] = {"hash": file_hash, "chunk_ids": []}
         else:
-            if index_metadata[f].get("hash") != file_hash:
-                # MODIFIED
+            existing_hash = index_metadata[f].get("hash")
+            if existing_hash not in known_hashes and existing_hash != file_hash:
+                # ACTUALLY MODIFIED
                 files_to_index.append(f)
                 chunk_ids_to_delete.extend(index_metadata[f].get("chunk_ids", []))
                 deleted_files.append(f)
                 index_metadata[f] = {"hash": file_hash, "chunk_ids": []}
+            else:
+                # UP TO DATE (normalize stored hash to standard LF hash)
+                index_metadata[f]["hash"] = file_hash
 
     for f in list(index_metadata.keys()):
         if f not in current_files:
@@ -496,7 +521,7 @@ def list_sessions(user_id: str = None, sessions_dir: str = None) -> list:
 # ─────────────────────────────────────────────────────────────
 # Step 6 — LLM
 # ─────────────────────────────────────────────────────────────
-def get_llm(config: dict = None) -> ChatGoogleGenerativeAI:
+def get_llm(config: dict = None, model_name: str = None) -> ChatGoogleGenerativeAI:
     """Initialise the Google GenAI LLM using values from config."""
     if config is None:
         config = load_config()
@@ -507,8 +532,9 @@ def get_llm(config: dict = None) -> ChatGoogleGenerativeAI:
             "Please add it to your .env file: GEMINI_API_KEY=your_key_here"
         )
     llm_cfg = config.get("llm", {})
+    selected_model = model_name or llm_cfg.get("model", "gemini-1.5-flash")
     return ChatGoogleGenerativeAI(
-        model=llm_cfg.get("model", "gemini-2.5-flash"),
+        model=selected_model,
         google_api_key=api_key,
         temperature=llm_cfg.get("temperature", 0.2),
         max_output_tokens=llm_cfg.get("max_tokens", 1024),
@@ -559,8 +585,6 @@ def rag_answer(
 
     tools     = [search_documents, save_lead]
     tool_map  = {t.name: t for t in tools}
-    llm       = get_llm(config)
-    llm_tools = llm.bind_tools(tools)
 
     # ── RAG prompt template ─────────────────────────────────────────────────
     prompt = ChatPromptTemplate.from_messages([
@@ -592,29 +616,57 @@ def rag_answer(
             history_messages.append(AIMessage(content=entry["content"]))
 
     # Render the prompt into a list of messages
-    messages = prompt.format_messages(
+    initial_messages = prompt.format_messages(
         chat_history=history_messages,
         query=query,
     )
 
-    # Agentic tool-calling loop (max 5 iterations to prevent infinite loops)
+    # Model candidates to try: primary model first, followed by fallbacks if 429 quota is hit
+    configured_model = config.get("llm", {}).get("model", "gemini-1.5-flash")
+    model_candidates = [configured_model]
+    for fallback in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]:
+        if fallback not in model_candidates:
+            model_candidates.append(fallback)
+
+    # Agentic tool-calling loop with automatic fallback across models if quota is exhausted
     response = None
-    for _ in range(5):
-        response = llm_tools.invoke(messages)
-        messages.append(response)
+    last_error = None
 
-        # No tool calls — we have the final answer
-        if not getattr(response, "tool_calls", None):
-            break
+    for active_model in model_candidates:
+        try:
+            llm = get_llm(config, model_name=active_model)
+            llm_tools = llm.bind_tools(tools)
+            current_messages = list(initial_messages)
 
-        # Execute each tool call and feed results back
-        for tc in response.tool_calls:
-            tool_fn = tool_map.get(tc["name"])
-            if tool_fn:
-                result = tool_fn.invoke(tc["args"])
+            for _ in range(5):
+                resp = llm_tools.invoke(current_messages)
+                current_messages.append(resp)
+
+                if not getattr(resp, "tool_calls", None):
+                    response = resp
+                    break
+
+                for tc in resp.tool_calls:
+                    tool_fn = tool_map.get(tc["name"])
+                    if tool_fn:
+                        result = tool_fn.invoke(tc["args"])
+                    else:
+                        result = f"Unknown tool: {tc['name']}"
+                    current_messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"], name=tc["name"]))
+
+            if response is not None:
+                break
+        except Exception as e:
+            err_str = str(e)
+            if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str:
+                print(f"[WARN] Quota exhausted for '{active_model}'. Trying fallback model...")
+                last_error = e
+                continue
             else:
-                result = f"Unknown tool: {tc['name']}"
-            messages.append(ToolMessage(content=str(result), tool_call_id=tc["id"], name=tc["name"]))
+                raise e
+
+    if response is None and last_error:
+        raise last_error
 
     answer = ""
     if response and response.content:
