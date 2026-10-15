@@ -4,7 +4,7 @@
 # ─────────────────────────────────────────────────────────────
 
 llm:
-  model: gemini-1.5-flash   # Google Gemini model (1,500 requests/day on free tier)
+  model: gemini-2.5-flash   # Google Gemini model (e.g. gemini-2.5-flash, gemini-flash-latest)
   temperature: 0.2          # 0.0 = factual / deterministic  |  1.0 = creative
   max_tokens: 1024          # Maximum tokens in each response
 

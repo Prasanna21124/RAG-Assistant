@@ -80,7 +80,7 @@ def load_config(config_path: str = "config.yaml") -> dict:
     """Load config.yaml with sensible defaults for every key."""
     defaults = {
         "llm": {
-            "model": "gemini-1.5-flash",
+            "model": "gemini-2.5-flash",
             "temperature": 0.2,
             # "max_tokens": 1024,
         },
@@ -532,7 +532,7 @@ def get_llm(config: dict = None, model_name: str = None) -> ChatGoogleGenerative
             "Please add it to your .env file: GEMINI_API_KEY=your_key_here"
         )
     llm_cfg = config.get("llm", {})
-    selected_model = model_name or llm_cfg.get("model", "gemini-1.5-flash")
+    selected_model = model_name or llm_cfg.get("model", "gemini-2.5-flash")
     return ChatGoogleGenerativeAI(
         model=selected_model,
         google_api_key=api_key,
@@ -622,9 +622,9 @@ def rag_answer(
     )
 
     # Model candidates to try: primary model first, followed by fallbacks if 429 quota is hit
-    configured_model = config.get("llm", {}).get("model", "gemini-1.5-flash")
+    configured_model = config.get("llm", {}).get("model", "gemini-2.5-flash")
     model_candidates = [configured_model]
-    for fallback in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]:
+    for fallback in ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-pro-latest"]:
         if fallback not in model_candidates:
             model_candidates.append(fallback)
 
