@@ -71,7 +71,10 @@ def _load_index_worker(config: dict):
         _reload_index(config)
         print("[OK] Vector store and retriever loaded successfully.")
     except Exception as e:
-        print(f"[ERROR] Background index loading failed: {e}")
+        import traceback
+        err = traceback.format_exc()
+        app_state["index_error"] = err
+        print(f"[ERROR] Background index loading failed:\n{err}")
     finally:
         index_ready_event.set()
 
@@ -155,6 +158,7 @@ def health_check():
         "vector_store_ready": app_state.get("vector_store") is not None,
         "indexed_documents": len(docs),
         "documents": docs,
+        "index_error": app_state.get("index_error"),
     }
 
 
