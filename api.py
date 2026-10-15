@@ -62,11 +62,16 @@ def _reload_index(config: dict) -> None:
 # ─────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    import asyncio
     config = load_config()
     app_state["config"] = config
-    # Load index in background thread so uvicorn binds to $PORT immediately
-    asyncio.create_task(asyncio.to_thread(_reload_index, config))
+    # Load index synchronously at startup — asyncio.create_task inside lifespan
+    # gets garbage-collected before it runs, leaving retriever always None.
+    # The synchronous load here ensures the retriever is ready for all requests.
+    try:
+        _reload_index(config)
+        print("[OK] Vector store and retriever loaded successfully.")
+    except Exception as e:
+        print(f"[WARNING] Index load failed at startup: {e}. Will retry on first /ask.")
     yield
     app_state.clear()
 
@@ -151,8 +156,15 @@ def ask(
     - **session_id**: unique identifier for the conversation session (default: `"default"`)
     - **user_id**: optional unique identifier for the user (to isolate history per user)
     """
-    if app_state.get("retriever") is None:
-        _reload_index(app_state.get("config") or load_config())
+    # If retriever failed to load at startup, attempt a single reload (non-blocking timeout)
+    if app_state.get("vector_store") is None and app_state.get("retriever") is None:
+        try:
+            _reload_index(app_state.get("config") or load_config())
+        except Exception as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"The assistant is still initializing. Please try again in a few seconds. ({e})",
+            )
     retriever = app_state.get("retriever")
     effective_user_id = req.user_id or x_user_id
     storage_sid = get_storage_session_id(req.session_id, effective_user_id)
