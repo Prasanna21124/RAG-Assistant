@@ -139,6 +139,7 @@ def health_check():
         "status": "ok",
         "vector_store_ready": app_state.get("vector_store") is not None,
         "indexed_documents": len(docs),
+        "documents": docs,
     }
 
 
@@ -208,7 +209,7 @@ async def upload_document(file: UploadFile = File(...), api_key: str = Depends(g
 
 # ── List Documents ────────────────────────────────────────────
 @app.get("/documents", tags=["Documents"])
-def get_documents(api_key: str = Depends(get_api_key)):
+def get_documents():
     """List all currently indexed documents."""
     docs = list_documents(app_state.get("config"))
     return {"documents": docs, "count": len(docs)}

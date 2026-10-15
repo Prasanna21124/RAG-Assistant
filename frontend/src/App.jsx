@@ -180,11 +180,26 @@ export default function App() {
     catch { return {} }
   })
   const [sessionsLoaded, setSessionsLoaded] = useState(false)
-  const [docs, setDocs] = useState([])
+  const [docs, setDocs] = useState(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('rag_cached_docs'))
+      if (Array.isArray(cached) && cached.length > 0) return cached
+    } catch { }
+    return ['amazon.csv']
+  })
   const [sidebarSearch, setSidebarSearch] = useState('')
   const [apiStatus, setApiStatus] = useState('checking')
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const { toasts, push: pushToast } = useToast()
+
+  const updateDocs = useCallback((newDocs) => {
+    if (Array.isArray(newDocs)) {
+      setDocs(newDocs)
+      try {
+        localStorage.setItem('rag_cached_docs', JSON.stringify(newDocs))
+      } catch { }
+    }
+  }, [])
 
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
@@ -196,18 +211,28 @@ export default function App() {
     localStorage.setItem('theme', dark ? 'dark' : 'light')
   }, [dark])
 
-  /* Health check every 10s */
+  /* Health check every 5s and sync indexed documents */
   useEffect(() => {
     async function check() {
       try {
         const r = await fetch(`${API_URL}/health`, { headers: HEADERS })
-        setApiStatus(r.ok ? 'online' : 'offline')
-      } catch { setApiStatus('offline') }
+        if (r.ok) {
+          const d = await r.json()
+          setApiStatus('online')
+          if (Array.isArray(d.documents)) {
+            updateDocs(d.documents)
+          }
+        } else {
+          setApiStatus('offline')
+        }
+      } catch {
+        setApiStatus('offline')
+      }
     }
     check()
-    const id = setInterval(check, 10000)
+    const id = setInterval(check, 5000)
     return () => clearInterval(id)
-  }, [])
+  }, [updateDocs])
 
   /* Re-fetch docs & sessions whenever the API comes online (catches delayed startup) */
   useEffect(() => {
@@ -280,7 +305,7 @@ export default function App() {
   async function fetchDocs() {
     try {
       const r = await fetch(`${API_URL}/documents`, { headers: HEADERS })
-      if (r.ok) { const d = await r.json(); setDocs(d.documents || []) }
+      if (r.ok) { const d = await r.json(); updateDocs(d.documents || []) }
     } catch { }
   }
 
