@@ -5,7 +5,22 @@ import './App.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 const API_KEY = import.meta.env.VITE_API_KEY || 'my-super-secret-key-123'
-const HEADERS = { 'Content-Type': 'application/json', 'X-API-Key': API_KEY }
+
+function getOrCreateUserId() {
+  let id = localStorage.getItem('rag_user_id')
+  if (!id) {
+    id = 'u_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36)
+    localStorage.setItem('rag_user_id', id)
+  }
+  return id
+}
+const USER_ID = getOrCreateUserId()
+
+const HEADERS = {
+  'Content-Type': 'application/json',
+  'X-API-Key': API_KEY,
+  'X-User-Id': USER_ID,
+}
 
 /* ─── Typewriter ───────────────────────────── */
 function useTypewriter(text, speed = 12) {
@@ -241,7 +256,7 @@ export default function App() {
   /* ── API ── */
   async function loadHistory() {
     try {
-      const r = await fetch(`${API_URL}/history/${sessionId}`, { headers: HEADERS })
+      const r = await fetch(`${API_URL}/history/${encodeURIComponent(sessionId)}?user_id=${encodeURIComponent(USER_ID)}`, { headers: HEADERS })
       if (r.ok) {
         const d = await r.json()
         setMessages(d.history.map(h => ({ role: h.role, content: h.content, ts: new Date().toISOString(), isHistory: true })))
@@ -251,7 +266,7 @@ export default function App() {
 
   async function fetchSessions() {
     try {
-      const r = await fetch(`${API_URL}/sessions`, { headers: HEADERS })
+      const r = await fetch(`${API_URL}/sessions?user_id=${encodeURIComponent(USER_ID)}`, { headers: HEADERS })
       if (r.ok) { const d = await r.json(); setSessions(d.sessions || []) }
     } catch { }
     finally { setSessionsLoaded(true) }
@@ -265,13 +280,13 @@ export default function App() {
   }
 
   async function clearHistory() {
-    await fetch(`${API_URL}/history/${sessionId}`, { method: 'DELETE', headers: HEADERS })
+    await fetch(`${API_URL}/history/${encodeURIComponent(sessionId)}?user_id=${encodeURIComponent(USER_ID)}`, { method: 'DELETE', headers: HEADERS })
     setMessages([])
     pushToast('Chat history cleared', 'success')
   }
 
   async function deleteSession(sid) {
-    await fetch(`${API_URL}/history/${sid}`, { method: 'DELETE', headers: HEADERS })
+    await fetch(`${API_URL}/history/${encodeURIComponent(sid)}?user_id=${encodeURIComponent(USER_ID)}`, { method: 'DELETE', headers: HEADERS })
     pushToast(`Session "${sid}" deleted`, 'success')
     if (sid === sessionId) { setSessionId('default'); setMessages([]) }
     fetchSessions()
@@ -317,7 +332,11 @@ export default function App() {
     setMessages(prev => [...prev, { role: 'user', content: query, ts }])
     setLoading(true)
     try {
-      const r = await fetch(`${API_URL}/ask`, { method: 'POST', headers: HEADERS, body: JSON.stringify({ query, session_id: sessionId }) })
+      const r = await fetch(`${API_URL}/ask`, {
+        method: 'POST',
+        headers: HEADERS,
+        body: JSON.stringify({ query, session_id: sessionId, user_id: USER_ID }),
+      })
       const d = await r.json()
       setMessages(prev => [...prev, { role: 'assistant', content: r.ok ? d.answer : `⚠ ${d.detail || 'Error'}`, ts: new Date().toISOString() }])
       if (!r.ok) pushToast('API returned an error', 'error')

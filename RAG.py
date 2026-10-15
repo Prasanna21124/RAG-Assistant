@@ -448,18 +448,29 @@ def clear_chat_history(session_id: str = "default", sessions_dir: str = None) ->
             print(f"ℹ  No history found for session '{session_id}'.")
 
 
-def list_sessions(sessions_dir: str = None) -> list:
-    """Return all active session IDs from the database, ordered by newest first."""
+def list_sessions(user_id: str = None, sessions_dir: str = None) -> list:
+    """Return all active session IDs from the database, ordered by newest first.
+    If user_id is provided, only return sessions belonging to that user.
+    """
     if not SessionLocal: return []
     from sqlalchemy import func
     with SessionLocal() as db:
-        sessions = db.query(
-            ChatMessage.session_id
-        ).group_by(
-            ChatMessage.session_id
-        ).order_by(
-            func.max(ChatMessage.ts).desc()
-        ).all()
+        query = db.query(ChatMessage.session_id)
+        if user_id and user_id.strip():
+            prefix = f"{user_id.strip()}:"
+            sessions = (
+                query.filter(ChatMessage.session_id.like(f"{prefix}%"))
+                .group_by(ChatMessage.session_id)
+                .order_by(func.max(ChatMessage.ts).desc())
+                .all()
+            )
+            return [s[0][len(prefix):] for s in sessions if s[0].startswith(prefix)]
+
+        sessions = (
+            query.group_by(ChatMessage.session_id)
+            .order_by(func.max(ChatMessage.ts).desc())
+            .all()
+        )
         return [s[0] for s in sessions]
 
 

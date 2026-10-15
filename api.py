@@ -7,7 +7,7 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Security
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Security, Header
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -100,11 +100,19 @@ app.add_middleware(
 class AskRequest(BaseModel):
     query: str
     session_id: str = "default"
+    user_id: str | None = None
 
 
 class AskResponse(BaseModel):
     answer: str
     session_id: str
+
+
+def get_storage_session_id(session_id: str, user_id: str | None = None) -> str:
+    """Namespace session IDs per user so users only access their own history."""
+    if user_id and user_id.strip():
+        return f"{user_id.strip()}:{session_id}"
+    return session_id
 
 
 # ─────────────────────────────────────────────────────────────
@@ -131,18 +139,25 @@ def health_check():
 
 # ── Ask ───────────────────────────────────────────────────────
 @app.post("/ask", response_model=AskResponse, tags=["Chat"])
-def ask(req: AskRequest, api_key: str = Depends(get_api_key)):
+def ask(
+    req: AskRequest,
+    x_user_id: str | None = Header(None, alias="X-User-Id"),
+    api_key: str = Depends(get_api_key),
+):
     """
     Ask a question against the indexed documents.
 
     - **query**: your question
     - **session_id**: unique identifier for the conversation session (default: `"default"`)
+    - **user_id**: optional unique identifier for the user (to isolate history per user)
     """
     if app_state.get("retriever") is None:
         _reload_index(app_state.get("config") or load_config())
     retriever = app_state.get("retriever")
+    effective_user_id = req.user_id or x_user_id
+    storage_sid = get_storage_session_id(req.session_id, effective_user_id)
     try:
-        answer = rag_answer(retriever, req.query, req.session_id, app_state["config"])
+        answer = rag_answer(retriever, req.query, storage_sid, app_state["config"])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return AskResponse(answer=answer, session_id=req.session_id)
@@ -210,9 +225,16 @@ def remove_document(filename: str, api_key: str = Depends(get_api_key)):
 
 # ── Chat History ──────────────────────────────────────────────
 @app.get("/history/{session_id}", tags=["Sessions"])
-def get_history(session_id: str, api_key: str = Depends(get_api_key)):
-    """Retrieve the full chat history for a session from PostgreSQL."""
-    history = load_chat_history(session_id)
+def get_history(
+    session_id: str,
+    user_id: str | None = None,
+    x_user_id: str | None = Header(None, alias="X-User-Id"),
+    api_key: str = Depends(get_api_key),
+):
+    """Retrieve the full chat history for a session from PostgreSQL, scoped by user_id."""
+    effective_user_id = user_id or x_user_id
+    storage_sid = get_storage_session_id(session_id, effective_user_id)
+    history = load_chat_history(storage_sid)
     return {
         "session_id":    session_id,
         "history":       history,
@@ -221,16 +243,28 @@ def get_history(session_id: str, api_key: str = Depends(get_api_key)):
 
 
 @app.delete("/history/{session_id}", tags=["Sessions"])
-def delete_history(session_id: str, api_key: str = Depends(get_api_key)):
-    """Clear the chat history for a session from PostgreSQL."""
-    clear_chat_history(session_id)
+def delete_history(
+    session_id: str,
+    user_id: str | None = None,
+    x_user_id: str | None = Header(None, alias="X-User-Id"),
+    api_key: str = Depends(get_api_key),
+):
+    """Clear the chat history for a session from PostgreSQL, scoped by user_id."""
+    effective_user_id = user_id or x_user_id
+    storage_sid = get_storage_session_id(session_id, effective_user_id)
+    clear_chat_history(storage_sid)
     return {"message": f"Chat history cleared for session '{session_id}'."}
 
 
 # ── Sessions ──────────────────────────────────────────────────
 @app.get("/sessions", tags=["Sessions"])
-def get_sessions(api_key: str = Depends(get_api_key)):
-    """List all active session IDs from PostgreSQL."""
-    sessions = list_sessions()
+def get_sessions(
+    user_id: str | None = None,
+    x_user_id: str | None = Header(None, alias="X-User-Id"),
+    api_key: str = Depends(get_api_key),
+):
+    """List all active session IDs from PostgreSQL, filtered by user_id if provided."""
+    effective_user_id = user_id or x_user_id
+    sessions = list_sessions(user_id=effective_user_id)
     return {"sessions": sessions, "count": len(sessions)}
 
