@@ -153,12 +153,15 @@ def root():
 def health_check():
     """Check whether the API is running and the index is loaded."""
     docs = list_documents(app_state.get("config"))
+    raw_k = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip("'\" \n\r\t")
+    key_preview = f"{raw_k[:6]}...{raw_k[-4:]}" if len(raw_k) >= 10 else ("set" if raw_k else "missing")
     return {
         "status": "ok",
         "vector_store_ready": app_state.get("vector_store") is not None,
         "indexed_documents": len(docs),
         "documents": docs,
         "index_error": app_state.get("index_error"),
+        "gemini_key": key_preview,
     }
 
 

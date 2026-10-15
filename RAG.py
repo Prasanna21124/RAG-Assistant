@@ -525,7 +525,8 @@ def get_llm(config: dict = None, model_name: str = None) -> ChatGoogleGenerative
     """Initialise the Google GenAI LLM using values from config."""
     if config is None:
         config = load_config()
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    raw_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
+    api_key = raw_key.strip("'\" \n\r\t")
     if not api_key:
         raise EnvironmentError(
             "GEMINI_API_KEY (or GOOGLE_API_KEY) not found.\n"
@@ -624,7 +625,7 @@ def rag_answer(
     # Model candidates to try: primary model first, followed by fallbacks if 429 quota is hit
     configured_model = config.get("llm", {}).get("model", "gemini-2.5-flash")
     model_candidates = [configured_model]
-    for fallback in ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-pro-latest"]:
+    for fallback in ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-pro", "gemini-pro-latest"]:
         if fallback not in model_candidates:
             model_candidates.append(fallback)
 
