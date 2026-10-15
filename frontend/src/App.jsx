@@ -3,8 +3,9 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import './App.css'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
-const API_KEY = import.meta.env.VITE_API_KEY || 'my-super-secret-key-123'
+const rawApiUrl = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').trim().replace(/\/+$/, '')
+const API_URL = rawApiUrl
+const API_KEY = (import.meta.env.VITE_API_KEY || 'my-super-secret-key-123').trim()
 
 function getOrCreateUserId() {
   let id = localStorage.getItem('rag_user_id')
@@ -370,8 +371,9 @@ export default function App() {
       const d = await r.json()
       setMessages(prev => [...prev, { role: 'assistant', content: r.ok ? d.answer : `⚠ ${d.detail || 'Error'}`, ts: new Date().toISOString() }])
       if (!r.ok) pushToast('API returned an error', 'error')
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: '⚠ Cannot connect to the API. Make sure it is running.', ts: new Date().toISOString() }])
+    } catch (err) {
+      console.error('API request failed:', err)
+      setMessages(prev => [...prev, { role: 'assistant', content: `⚠ Cannot connect to the API (${err.message || 'Network error'}). Make sure the server is online.`, ts: new Date().toISOString() }])
       pushToast('Cannot reach the API server', 'error')
     }
     setLoading(false)
