@@ -209,6 +209,11 @@ export default function App() {
     return () => clearInterval(id)
   }, [])
 
+  /* Re-fetch docs & sessions whenever the API comes online (catches delayed startup) */
+  useEffect(() => {
+    if (apiStatus === 'online') fetchDocs()
+  }, [apiStatus])
+
   /* Scroll-to-bottom button visibility */
   useEffect(() => {
     const el = chatViewRef.current
