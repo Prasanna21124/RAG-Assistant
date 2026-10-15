@@ -1,5 +1,10 @@
 import os
 import sys
+
+# Force offline mode for HuggingFace embeddings to prevent slow network retry hangs
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
 from contextlib import asynccontextmanager
 
 if hasattr(sys.stdout, "reconfigure"):

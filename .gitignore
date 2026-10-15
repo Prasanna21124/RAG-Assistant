@@ -17,6 +17,7 @@ data/*
 # *.faiss
 # *.pkl
 sessions/
+*.db
 
 # ─────────────────────────────────────────────────────────────
 # Frontend Dependencies & Build Output

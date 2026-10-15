@@ -14,6 +14,10 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+# Force offline mode for HuggingFace embeddings to prevent slow network retry hangs
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 from sqlalchemy import create_engine, Column, String, Text, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -412,12 +416,19 @@ elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postg
 DB_URL = raw_db_url
 SessionLocal = None
 try:
-    engine = create_engine(DB_URL, connect_args={"connect_timeout": 5})
+    engine = create_engine(DB_URL, connect_args={"connect_timeout": 2})
     Base.metadata.create_all(engine)
     SessionLocal = sessionmaker(bind=engine)
-    print("[OK] Database connected successfully.")
+    print("[OK] PostgreSQL connected successfully.")
 except Exception as e:
-    print(f"WARNING:  Database connection failed: {e}. Set DATABASE_URL in .env.")
+    print(f"INFO: PostgreSQL not reachable ({e}). Falling back to local SQLite.")
+    try:
+        sqlite_engine = create_engine("sqlite:///chat_history.db")
+        Base.metadata.create_all(sqlite_engine)
+        SessionLocal = sessionmaker(bind=sqlite_engine)
+        print("[OK] Local SQLite database connected successfully.")
+    except Exception as sqle:
+        print(f"WARNING: SQLite fallback failed: {sqle}")
 
 
 def load_chat_history(session_id: str = "default", sessions_dir: str = None) -> list:
