@@ -15,6 +15,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Pre-download the sentence-transformers model so it is cached in the image
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
 
+# Ensure HuggingFace loads purely from cache without making network HEAD requests
+ENV HF_HUB_OFFLINE=1
+ENV TRANSFORMERS_OFFLINE=1
+
 COPY . .
 
 EXPOSE 8000

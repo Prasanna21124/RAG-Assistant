@@ -163,9 +163,17 @@ def build_vector_store(folder_path: str, config: dict = None) -> tuple:
     chunk_size   = config["retrieval"]["chunk_size"]
     chunk_overlap = config["retrieval"]["chunk_overlap"]
 
-    embedding_model = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
+    # Fast offline loading if cached locally, avoiding slow network timeouts
+    try:
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        embedding_model = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        )
+    except Exception:
+        os.environ.pop("HF_HUB_OFFLINE", None)
+        embedding_model = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        )
 
     metadata_path = os.path.join(index_path, "index_metadata.json")
     index_metadata: dict = {}
